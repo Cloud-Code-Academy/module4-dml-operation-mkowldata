@@ -17,7 +17,7 @@
  * The methods within this class serve as practical examples of different DML operations,
  * allowing developers to learn through practice and examples.
  *
- * @author Your Name
+ * @author May Keam
  */
 
 
@@ -31,13 +31,15 @@ public with sharing class DMLOperations {
      */
     public static Id insertNewAccount() {
         // Create a new Account instance
-
+        Account myAccount = new Account();
         // Set some fields on the Account
-
+        myAccount.Name = 'BumbleBee';
+        myAccount.Phone = '123-456-7890';
+        myAccount.AccountNumber = 'A92488765';
         // Insert the Account into the database
-
+        insert myAccount;
         // Return the Id of the newly created Account
-        return null;
+        return myAccount.Id;
     }
 
     /**
@@ -48,8 +50,9 @@ public with sharing class DMLOperations {
      */
     public static void createAccount(String name, String industry) {
         // Create a new Account and set the fields inline
-
+        Account myAccount2 = new Account(Name = name, Industry = industry);
         // Insert the Account
+        insert myAccount2;
     }
 
     
@@ -61,14 +64,16 @@ public with sharing class DMLOperations {
      */
     public static Id insertNewContact(Id accountId) {
         // Create a new Contact instance
-
+        Contact contact1 = new Contact();
         // Set some fields on the Contact
+        contact1.LastName = 'Doe';
+        contact1.FirstName = 'John';
         // Set the AccountId field to the given accountId
-
+        contact1.AccountId = accountId;
         // Insert the Contact into the database
-
+        insert contact1;
         // Return the Id of the newly created Contact
-        return null;
+        return contact1.Id;
     }
 
     /**
