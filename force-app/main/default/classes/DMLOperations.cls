@@ -144,6 +144,13 @@ public with sharing class DMLOperations {
      * @param list of Opportunities to be changed then upserted.
      */
     public static void upsertOpportunityList(List<Opportunity> opportunities) {
+        List<Opportunity> oppList = new List <Opportunity>(opportunities);
+        for( Opportunity opp : oppList ){
+            opp.StageName = 'Qualification';
+            opp.CloseDate = Date.today().addMonths(3);
+            opp.Amount = 50000.00;
+        }
+        upsert oppList;
         // Loop through each Opportunity in the list
             // Set the Opportunity's Stage to Qualification
             // Set the Opportunity's Close Date to 3 months from today
@@ -162,11 +169,55 @@ public with sharing class DMLOperations {
      * @param oppNames The list of Opportunity names.
      */
     public static void upsertOpportunities(String accountName, List<String> oppNames) {
-        // Loop through each Opportunity name
+        Account acct;
+                
+        //query account to see if it exists
+        List <Account> listOfAccounts = [SELECT Id, Name
+                                         FROM Account
+                                         WHERE Name = :accountName];
+
+        //if account doesn't exist - create the account
+        if( !listOfAccounts.isEmpty()){
+            acct = listOfAccounts[0];
+        }
+        else {
+            acct = new Account(Name = accountName);
+            insert acct;
+        }
+
+        //Map account to opportunities so that you can put the accountid in the new opportunity
+        Map <String, Opportunity> currentOpps = new Map <String, Opportunity>();
+            for(Opportunity opp : [SELECT Id, Name FROM Opportunity WHERE Name IN :oppNames AND AccountId = :acct.Id]){
+                currentOpps.put(opp.Name, opp);
+            }        
+
+        //create a list to put new opportunities in
+        List <Opportunity> listOfOpps = new List <Opportunity>();
+
+        List <Opportunity> oppList = [SELECT Id, Name
+                                      FROM Opportunity
+                                      WHERE Name IN :oppNames AND AccountId = :acct.Id];
+        
+        for( String oppName : oppNames ) {
+            if( currentOpps.containsKey(oppName)){
+                listOfOpps.add(currentOpps.get(oppName));
+                }
+                else {
+                    Opportunity newOpp = new Opportunity(
+                   Name = oppName,
+                   AccountId = acct.Id,
+                   StageName = 'Closed Won',
+                   CloseDate = Date.today()
+                    );
+                   listOfOpps.add(newOpp);
+                }
+            }
+            upsert listOfOpps;
+        }        
+            // Loop through each Opportunity name
             // Create an Opportunity with the given name
             // Add the Opportunity to the list
-    }
-    
+        
     /**
      * Question 9
 	 * Upserts an Account with the specified name.
@@ -175,17 +226,35 @@ public with sharing class DMLOperations {
 	 * @param accountName The name of the Account to be upserted.
 	 * @return The Account that was upserted.
 	 */
-	public static Account upsertAccount(String accountName) {
+	public static Account upsertAccount(String accountName){
 		// Query for the Account
-		List<Account> accounts = [SELECT Id FROM Account WHERE Name = :accountName];
-
+        Account newAcct;
+		List<Account> accounts = [SELECT Id, Name, Description FROM Account WHERE Name = :accountName];
+        if( !accounts.isEmpty()){
+            newAcct = accounts[0];
+        }
+        else {
+            newAcct = new Account(Name = accountName, Description = 'New Account');
+            insert newAcct;
+        }
+        
+        for( Account acct : accounts ){
+            if( acct.Name == accountName){
+                acct.Description = 'Updated Account';
+            }
+            else {
+                newAcct = new Account(
+                    Name = accountName,
+                    Description = 'New Account'
+                );
+            }
+        }
+        upsert newAcct;
 		// if the Account exists, update the description
-
-		// otherwise, create a new Account and set the description
-
+        // otherwise, create a new Account and set the description
 		// Upsert the Account
-		return null;
-	}
+		return newAcct;
+    }
 
     /**
      * Question 10
