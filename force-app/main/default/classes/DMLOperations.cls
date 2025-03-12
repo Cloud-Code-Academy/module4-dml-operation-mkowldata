@@ -221,38 +221,29 @@ public with sharing class DMLOperations {
 	 */
 	public static Account upsertAccount(String accountName){
 		// Query for the Account
-        Account newAcct;
-		List<Account> accounts = [SELECT Id, Name, Description 
-                                  FROM Account 
-                                  WHERE Name = :accountName WITH SECURITY_ENFORCED];
-        if( !accounts.isEmpty()){
-            newAcct = accounts[0];
+        Account acct;
+        List<Account> findAccount = [SELECT Id, Name, Description
+                                     FROM Account
+                                     WHERE Name = :accountName WITH SECURITY_ENFORCED];
+        if(!findAccount.isEmpty()){
+            acct = findAccount[0];
+            acct.Name = accountName;
+            acct.Description = 'Updated Account';
+        }else {
+            acct = new Account(Name = accountName);
+            Database.insert(acct, accessLevel.USER_MODE);
+            acct.Description = 'New Account';
         }
-        else {
-            newAcct = new Account(Name = accountName, Description = 'New Account');
-            database.insert(newAcct, accessLevel.USER_MODE);
-        }
-        for( Account acct : accounts ){
-            if( acct.Name == accountName){
-                acct.Description = 'Updated Account';
-            }
-            else {
-                newAcct = new Account(
-                    Name = accountName,
-                    Description = 'New Account'
-                );
-            }
-        }
-        database.upsert(newAcct, accessLevel.USER_MODE);
+        Database.upsert(acct, accessLevel.USER_MODE);
 		// if the Account exists, update the description
         // otherwise, create a new Account and set the description
 		// Upsert the Account
-		return newAcct;
+		return acct;
     }
 
     /**
      * Question 10
-	 * Manage the association between Contacts and Accounts 
+	 * Manage the association between Contacts and Accounts
 	 * Ensure that for each Contact in the provided list, there is a corresponding Account Name that matches the Contact's last name.
 	 * If such an Account does not exist, the method creates it; if it does, the method ensures the Contact is associated with it. (Hint: use previous upsertAccount method - this may cause bad practices but for learning purposes it's okay.)
      * Example Contact.LastName = 'Doe' Link to Account.Name = 'Doe' 
@@ -260,43 +251,48 @@ public with sharing class DMLOperations {
 	 * @param contactsToUpsert List of Contacts to be upserted and linked to accounts.
 	 */
 	public static void upsertAccountsWithContacts(List<Contact> contactsToUpsert) {
-       
-        //create list, Map and Set to hold data to store the accounts that need to be upserted to database
-        List <Account> accountsToUpsert = new List<Account>();
-        // Loop through each Contact to compile a Set collection of unique lastnames(of data type string) from the list of contactsToUpsert 
-        Set <String> lastNames = new Set <String>();
-        for( Contact cont : contactsToUpsert ){
-            if(cont.LastName != null){
-                lastNames.add(cont.LastName);
-            }
+		//create a Set to capture unique last names from the list of contacts to upsert
+        Set<String> contactLastName = new Set<String>();
+        // Loop through each Contact
+        for(Contact con : contactsToUpsert){
+            if(String.isBlank(con.LastName)){
+                continue;
+            } contactLastName.add(con.LastName);
         }
-        // Get a list of existing Accounts where the Contact LastNames in the Set of last names = Account Name
-        List <Account> existingAccts = [SELECT Id, Name
-                                        FROM Account
-                                        WHERE Name IN :lastNames WITH SECURITY_ENFORCED];
-        // For each account in this list of accounts, add the account to a Map collection for lookup
-        Map <String, Account> lastNameToAccountMap = new Map <String, Account>();
-        for ( Account acct : existingAccts ){
-            lastNameToAccountMap.put(acct.Name, acct);
+		// Get a list of exsiting accounts where the last name is in the Set collection of contacts to upsert
+        List<Account> existingAccountNames = [SELECT Id, Name
+                                              FROM Account
+                                              WHERE Name IN :contactLastName WITH SECURITY_ENFORCED];
+        // Extract the Account Name from Contact's LastName - add each Name to ID to a Map collection 
+        Map<String, Id> acctNameToAccId = new Map<String, Id>();
+        for(Account acc : existingAccountNames){
+            if(acctNameToAccId.containsKey(acc.Name)){
+                continue;
+            } acctNameToAccId.put(acc.Name, acc.Id);
         }
-		// Extract the Contact's LastName for the Account Name
-        for( Contact cont : contactsToUpsert ){
-            String lastName = cont.LastName;
-            if(lastName == null){
+		// create a list to store the accounts that are not in the database
+        // Get the account based on the lastname from the Set collection, if name doesn't exist in the Map collection then add it to the list of accounts to insert
+        List<Account> accsForInsert = new List<Account>();
+        for(String lastName : contactLastName) {
+            if(acctNameToAccId.containsKey(lastName)) {
                 continue;
             }
-            // If account is not in the Map collection, create a new account and add it to the database and add it to the Map collection 
-            if(!lastNameToAccountMap.containsKey(lastName)){
-                Account newAcct = new Account(Name = lastName);
-                accountsToUpsert.add(newAcct);
-                lastNameToAccountMap.put(lastName, newAcct);
-            }
-            // // Get the account based on the name and Link the Contact to its Account using the Account Id
-            cont.AccountId = lastNameToAccountMap.get(lastName).Id;
+            accsForInsert.add(new Account(Name = lastName));
         }
-        // Upsert the Contacts
-        Database.upsert(accountsToUpsert, accessLevel.USER_MODE);
-    }
+        Database.insert(accsForInsert, accessLevel.USER_MODE);
+		// Add the newly created Accounts to the Map collection
+        for(Account acc : accsForInsert){
+            if(acctNameToAccId.containsKey(acc.Name)){
+                continue;
+            } acctNameToAccId.put(acc.Name, acc.Id);
+        }
+		// Link the Contact to upsert to its Account using the Account Id from the Map collection
+        for(Contact con : contactsToUpsert){
+            con.AccountId = acctNameToAccId.get(con.LastName);
+        }
+		// Upsert the Contacts
+        Database.upsert(contactsToUpsert, accessLevel.USER_MODE);
+	}
     
     /**
      * Question 11
